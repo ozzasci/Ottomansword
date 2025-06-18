@@ -1,208 +1,127 @@
-// --- GLOBAL STATE ---
-let words = JSON.parse(localStorage.getItem('words')) || [];
+// LocalStorage ve uygulama değişkenleri
+let words = JSON.parse(localStorage.getItem('words') || '[]');
 let notificationIntervals = new Map();
-let notificationWordCount = parseInt(localStorage.getItem('notificationWordCount')) || 0;
-let dailyGoal = 10;
-let learnedToday = parseInt(localStorage.getItem('learnedToday')) || 0;
-let quizStats = JSON.parse(localStorage.getItem('quizStats')) || { correct: 0, total: 0 };
-let quizData = { idx: 0, arr: [], mode: false };
-let audioQuizData = { idx: 0, arr: [] };
+let notificationWordCount = parseInt(localStorage.getItem('notificationWordCount') || '0');
+let learnedToday = parseInt(localStorage.getItem('learnedToday') || '0');
+let dailyGoal = 10, quizStats = JSON.parse(localStorage.getItem('quizStats') || '{"correct":0,"total":0}'), quizData = { arr: [], idx: 0, mode: false }, audioQuizData = { arr: [], idx: 0 };
+let flashcardIndex = 0, flashcardShowMeaning = false;
 
-// --- TOAST ---
-function showToast(msg, color="bg-green-500") {
-  const toast = document.getElementById("toast");
-  toast.textContent = msg;
-  toast.className = `fixed right-4 bottom-4 text-white px-4 py-3 rounded shadow-lg transition z-50 ${color} opacity-100`;
-  toast.style.pointerEvents = "auto";
-  setTimeout(()=>toast.classList.add("opacity-0"), 2500);
+// Tema
+function toggleTheme() {
+  const html = document.documentElement;
+  if (html.classList.contains('dark')) {
+    html.classList.remove('dark');
+    localStorage.theme = 'light';
+    document.getElementById('themeIcon').textContent = '🌙';
+  } else {
+    html.classList.add('dark');
+    localStorage.theme = 'dark';
+    document.getElementById('themeIcon').textContent = '☀️';
+  }
+}
+if (localStorage.theme === 'dark') document.documentElement.classList.add('dark');
+
+// Sayfada bölüm geçişi (mobil menü ve diğer bölümler için)
+function showSection(id) {
+  for (const sec of ['kelimeEkle', 'kelimeListesi', 'ayarlar', 'quiz', 'audioQuiz', 'flashcard']) {
+    const el = document.getElementById(sec);
+    if (el) {
+      if (sec === id) {
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('fade-in'), 10);
+      } else {
+        el.classList.add('hidden');
+        el.classList.remove('fade-in');
+      }
+    }
+  }
+  if (id === "flashcard" && typeof showFlashcardSection === "function") showFlashcardSection();
+  if (id === "audioQuiz" && typeof showAudioQuizSection === "function") showAudioQuizSection();
 }
 
-// --- ERROR HANDLING ---
-function showError(msg) {
-  const errorDiv = document.getElementById('error');
-  errorDiv.textContent = msg;
-  errorDiv.classList.remove('hidden');
-}
-function hideError() {
-  const errorDiv = document.getElementById('error');
-  errorDiv.textContent = '';
-  errorDiv.classList.add('hidden');
-}
-
-// --- WORDS ---
-function isWordExists(word) {
-  return words.some(w => w.word && w.word.toLowerCase() === word.toLowerCase());
-}
+// Kelime Ekleme
 function addWord() {
-  const wordInput = document.getElementById('wordInput');
-  const intervalInput = document.getElementById('intervalInput');
-  const word = wordInput.value.trim();
-  const interval = parseInt(intervalInput.value) * 1000;
-  if (!word || isNaN(interval) || interval < 5000) {
-    showError('Lütfen bir kelime ve en az 5 saniyelik bir süre girin!');
-    return;
-  }
-  if (isWordExists(word)) {
-    showError('Bu kelime zaten listede!');
-    return;
-  }
-  words.push({ word, interval });
+  const word = document.getElementById('wordInput').value.trim();
+  const interval = parseInt(document.getElementById('intervalInput').value.trim()) || 10000;
+  if (word.length < 2) { showError("En az 2 karakter girin."); return; }
+  if (isWordExists(word)) { showError("Bu kelime zaten var."); return; }
+  words.push({ word: word, interval: interval });
   localStorage.setItem('words', JSON.stringify(words));
+  document.getElementById('wordInput').value = '';
+  document.getElementById('intervalInput').value = '';
   renderWords();
-  wordInput.value = '';
-  intervalInput.value = '';
-  learnedToday += 1;
-  localStorage.setItem('learnedToday', learnedToday);
-  updateProgressBar();
-  hideError();
-  showToast('Kelime eklendi!');
-  badgeBounce();
-}
-
-// --- BOUNCE BADGE ---
-function badgeBounce() {
-  const badge = document.getElementById('listBadge');
-  if (badge) {
-    badge.classList.add('bounce');
-    setTimeout(()=>badge.classList.remove('bounce'),250);
-  }
-}
-
-// --- LIST RENDERING ---
-function renderWords(filter="") {
-  const wordList = document.getElementById('wordList');
-  let filtered = words;
-  if(filter) {
-    filtered = words.filter(w=> 
-      w.word.toLowerCase().includes(filter.toLowerCase()) ||
-      (w.meaning && w.meaning.toLowerCase().includes(filter.toLowerCase()))
-    );
-  }
-  wordList.innerHTML = filtered.map((w,i) => `
-    <li class="flex items-center justify-between group bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 shadow-sm px-3 py-2 rounded-lg transition fade-in">
-      <div>
-        <span class="font-bold text-blue-700 dark:text-blue-300">${w.word}</span>
-        ${w.meaning ? `<span class="mx-2 text-gray-600 dark:text-gray-300">-</span><span class="italic text-purple-600 dark:text-purple-300">${w.meaning}</span>` : ""}
-        ${w.learned ? `<span class="inline-block bg-green-200 text-green-800 text-xs px-2 py-1 rounded-full font-semibold ml-2">Öğrenildi</span>` : ""}
-        ${w.favorite ? `<span class="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded-full font-semibold ml-2">★ Favori</span>` : ""}
-        ${w.note ? `<span class="block text-xs text-gray-500 mt-1">Not: ${w.note}</span>` : ""}
-      </div>
-      <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
-        <button title="Sesli oku" onclick="speakWord('${w.word.replace(/'/g,"\\'")}', '${(w.meaning||"").replace(/'/g,"\\'")}')" class="text-blue-500 hover:text-blue-700 text-lg">🔊</button>
-        <button title="Favori" onclick="toggleFavorite(${i})" class="${w.favorite?'text-yellow-400':'text-gray-400 hover:text-yellow-500'} text-lg">★</button>
-        <button title="Öğrenildi" onclick="toggleLearned(${i})" class="${w.learned?'text-green-500':'text-gray-400 hover:text-green-500'} text-lg">✔️</button>
-        <button title="Sil" onclick="removeWord(${i})" class="text-red-400 hover:text-red-700 text-lg">🗑️</button>
-      </div>
-    </li>
-  `).join('');
-  document.getElementById('listBadge').textContent = words.length;
-  document.getElementById('flashcardBadge').textContent = words.length;
-}
-
-// --- FAVORİ & ÖĞRENİLDİ ---
-function toggleFavorite(idx) {
-  words[idx].favorite = !words[idx].favorite;
-  localStorage.setItem('words', JSON.stringify(words));
-  renderWords(document.getElementById('wordSearch').value);
-  showToast(words[idx].favorite ? "Favorilere eklendi!" : "Favoriden çıkarıldı!", "bg-yellow-500");
-}
-function toggleLearned(idx) {
-  words[idx].learned = !words[idx].learned;
-  localStorage.setItem('words', JSON.stringify(words));
-  renderWords(document.getElementById('wordSearch').value);
-  showToast(words[idx].learned ? "Öğrenildi olarak işaretlendi!" : "Öğrenildi kaldırıldı!", "bg-green-600");
-}
-
-// --- SİLME ---
-function removeWord(idx) {
-  words.splice(idx,1);
-  localStorage.setItem('words', JSON.stringify(words));
-  renderWords(document.getElementById('wordSearch').value);
-  showToast('Kelime silindi!', "bg-red-500");
-  badgeBounce();
-  updateProgressBar();
-}
-function clearAllWords() {
-  words = [];
-  localStorage.setItem('words', JSON.stringify(words));
-  renderWords();
-  showToast('Tüm kelimeler silindi!', "bg-red-500");
+  showToast("Kelime eklendi!", "bg-green-600");
   badgeBounce();
   updateProgressBar();
 }
 
-// --- FİLTRELEME ---
-function filterWords() {
-  renderWords(document.getElementById('wordSearch').value);
-}
-
-// --- Dosya Yükleme ---
+// Dosya Yükleme ve Önizleme (CSV, XLSX, TXT, JSON)
 function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const file = fileInput.files[0];
-  if (!file) {
-    showError("Bir dosya seçmelisiniz.");
-    return;
-  }
+  if (!file) { showError("Bir dosya seçmelisiniz."); return; }
   const ext = file.name.split('.').pop().toLowerCase();
-  if (ext === 'txt') {
+  if (ext === 'csv') {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: function (results) { previewFileData(results.data); }
+    });
+  } else if (ext === 'xlsx') {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const [headers, ...rows] = json;
+      const dataArr = rows.filter(row => row[0] && row[0].toString().trim().length > 0)
+        .map(row => ({ word: row[0] ? row[0].toString().trim() : "", meaning: row[1] ? row[1].toString().trim() : "" }));
+      previewFileData(dataArr);
+    };
+    reader.readAsArrayBuffer(file);
+  } else if (ext === 'txt') {
+    const reader = new FileReader();
+    reader.onload = function (e) {
       const lines = e.target.result.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      addWordsBatch(lines);
+      const arr = lines.map(line => ({ word: line }));
+      previewFileData(arr);
     };
     reader.readAsText(file);
   } else if (ext === 'json') {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
       try {
-        const json = JSON.parse(e.target.result);
-        let kelimeler = [];
-        if (Array.isArray(json)) {
-          kelimeler = kelimelerFromArray(json);
-        } else {
-          Object.keys(json).forEach(mainKey => {
-            const val = json[mainKey];
-            if (Array.isArray(val)) {
-              kelimeler = kelimeler.concat(kelimelerFromArray(val));
-            }
-          });
-        }
-        if (kelimeler.length === 0) {
-          showError("JSON dosya formatı geçersiz veya uygun kelime bulunamadı.");
-        } else {
-          addWordsBatch(kelimeler);
-        }
-      } catch (err) {
-        showError("JSON dosyası okunamadı.");
-      }
+        let json = JSON.parse(e.target.result);
+        if (Array.isArray(json)) json = json.map(item => typeof item === "string" ? { word: item } : item);
+        previewFileData(json);
+      } catch (err) { showError("JSON dosyası okunamadı."); }
     };
     reader.readAsText(file);
-  } else {
-    showError("Desteklenmeyen dosya tipi.");
+  } else { showError("Desteklenmeyen dosya tipi."); }
+}
+function previewFileData(dataArr) {
+  const previewBox = document.getElementById('filePreview');
+  if (!Array.isArray(dataArr) || !dataArr.length) {
+    previewBox.innerHTML = "<div class='text-red-500'>Dosyada eklenebilir kelime bulunamadı.</div>";
+    previewBox.classList.remove('hidden'); return;
   }
-}
-function kelimelerFromArray(arr) {
-  const result = [];
-  arr.forEach(obj => {
-    if (typeof obj === "string") {
-      result.push(obj);
-    } else if (typeof obj === "object" && obj !== null) {
-      let word = obj.kelime || obj.phrase || obj.isim || obj.osmanlica || obj.tekil || obj["İsm-i Fâil"] || obj.word || obj["çoğul"];
-      let meaning = obj.anlam || obj.meaning || obj.turkce || obj.masdar || obj["Masdar"];
-      if (word) {
-        result.push({ word, meaning });
-      } else {
-        Object.keys(obj).forEach(key => {
-          if (typeof obj[key] === "string") {
-            result.push({ word: obj[key] });
-          }
-        });
-      }
-    }
+  let html = "<div class='overflow-x-auto'><table class='min-w-full text-sm border'><tr><th>#</th><th>Kelime</th><th>Anlam</th></tr>";
+  dataArr.forEach((item, i) => {
+    html += `<tr><td>${i + 1}</td><td>${item.word || item.kelime || ''}</td><td>${item.meaning || item.anlam || ''}</td></tr>`;
   });
-  return result;
+  html += "</table></div>";
+  html += `<button class="btn btn-success mt-2" onclick="addWordsBatchFromPreview()">Kelime Listesini Ekle</button>`;
+  previewBox.innerHTML = html;
+  previewBox.classList.remove('hidden');
+  window._previewDataArr = dataArr;
 }
+function addWordsBatchFromPreview() {
+  if (!window._previewDataArr) return;
+  addWordsBatch(window._previewDataArr);
+  document.getElementById('filePreview').classList.add('hidden');
+  window._previewDataArr = null;
+}
+// Toplu Kelime Ekleme
 function addWordsBatch(kelimeler) {
   let newWords = 0;
   kelimeler.forEach(kelime => {
@@ -231,47 +150,74 @@ function addWordsBatch(kelimeler) {
   badgeBounce();
   updateProgressBar();
 }
-
-// --- SESLİ OKUMA ---
-function speakWord(word, meaning) {
-  if (!('speechSynthesis' in window)) {
-    showError("Tarayıcınız sesli okuma desteklemiyor!");
-    return;
-  }
-  const utter = new SpeechSynthesisUtterance(`${word} ${meaning ? ': ' + meaning : ''}`);
-  window.speechSynthesis.speak(utter);
+function isWordExists(word) {
+  return words.some(w => w.word && w.word.toLowerCase() === word.toLowerCase());
 }
 
-// --- PROGRESS BAR ---
-function updateProgressBar() {
-  learnedToday = Math.min(learnedToday, dailyGoal);
-  const percent = Math.min(100, Math.round(100*learnedToday/dailyGoal));
-  document.getElementById('progressBar').style.width = percent + "%";
-  document.getElementById('progressText').textContent = `${learnedToday}/${dailyGoal}`;
+// Kelime Listesi ve Filtreleme
+function renderWords(search = '') {
+  const ul = document.getElementById('wordList');
+  search = (search || '').toLowerCase();
+  let filtered = search ? words.filter(w => (w.word && w.word.toLowerCase().includes(search)) || (w.meaning && w.meaning.toLowerCase().includes(search))) : words;
+  ul.innerHTML = filtered.map((w, i) => `
+    <li class="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded mb-1">
+      <div class="flex flex-col min-w-0 flex-1">
+        <span class="font-semibold truncate">${w.word}</span>
+        <span class="text-xs text-gray-500 truncate">${w.meaning || ""}</span>
+        <span class="text-xs">${w.note ? "Not: "+w.note : ""}</span>
+      </div>
+      <div class="flex items-center gap-2 ml-3">
+        <button class="btn btn-outline" title="Favori" onclick="toggleFavorite(${i})">${w.favorite ? '⭐' : '☆'}</button>
+        <button class="btn btn-outline" title="Öğrenildi" onclick="toggleLearned(${i})">${w.learned ? '✅' : '⬜'}</button>
+        <button class="btn btn-danger" title="Sil" onclick="removeWord(${i})">🗑️</button>
+      </div>
+    </li>
+  `).join('');
+  document.getElementById('listBadge').textContent = words.length;
 }
-function resetProgress() {
-  learnedToday = 0;
-  localStorage.setItem('learnedToday', learnedToday);
+function filterWords() {
+  renderWords(document.getElementById('wordSearch').value);
+}
+function removeWord(idx) {
+  words.splice(idx, 1);
+  localStorage.setItem('words', JSON.stringify(words));
+  renderWords(document.getElementById('wordSearch').value);
+  showToast('Kelime silindi!', "bg-red-500");
+  badgeBounce();
   updateProgressBar();
 }
+function clearAllWords() {
+  words = [];
+  localStorage.setItem('words', JSON.stringify(words));
+  renderWords();
+  showToast('Tüm kelimeler silindi!', "bg-red-500");
+  badgeBounce();
+  updateProgressBar();
+}
+function toggleFavorite(idx) {
+  words[idx].favorite = !words[idx].favorite;
+  localStorage.setItem('words', JSON.stringify(words));
+  renderWords(document.getElementById('wordSearch').value);
+  showToast(words[idx].favorite ? "Favorilere eklendi!" : "Favoriden çıkarıldı!", "bg-yellow-500");
+}
+function toggleLearned(idx) {
+  words[idx].learned = !words[idx].learned;
+  localStorage.setItem('words', JSON.stringify(words));
+  renderWords(document.getElementById('wordSearch').value);
+  showToast(words[idx].learned ? "Öğrenildi olarak işaretlendi!" : "Öğrenildi kaldırıldı!", "bg-green-600");
+}
 
-// --- BİLDİRİMLER ---
+// Bildirimler
 function showNotification(word, meaning, interval) {
   return setInterval(() => {
     let body = meaning ? `${word}: ${meaning}` : word;
-    new Notification('Kelime Hatırlatıcı', {
-      body: body,
-      icon: 'https://via.placeholder.com/32'
-    });
+    new Notification('Kelime Hatırlatıcı', { body: body, icon: 'https://via.placeholder.com/32' });
   }, interval);
 }
 function startNotifications(wordList) {
   stopAllNotifications();
   wordList.forEach(wordObj => {
-    if (!('Notification' in window)) {
-      alert('Tarayıcınız bildirimleri desteklemiyor!');
-      return;
-    }
+    if (!('Notification' in window)) { alert('Tarayıcınız bildirimleri desteklemiyor!'); return; }
     if (Notification.permission !== 'granted') {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
@@ -289,13 +235,6 @@ function startNotifications(wordList) {
     }
   });
 }
-function getSelectedItems(array, count, method) {
-  if (!count || count >= array.length) return array;
-  if (method === 'first') return array.slice(0, count);
-  if (method === 'last')  return array.slice(-count);
-  const shuffled = array.slice().sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-}
 function stopAllNotifications() {
   notificationIntervals.forEach((intervalId) => clearInterval(intervalId));
   notificationIntervals.clear();
@@ -304,14 +243,8 @@ function stopAllNotifications() {
 function updateNotifications() {
   const notificationWordCountInput = document.getElementById('notificationWordCount');
   const newCount = parseInt(notificationWordCountInput.value) || 0;
-  if (notificationWordCountInput.value && (isNaN(newCount) || newCount < 1)) {
-    showError('Lütfen geçerli bir bildirim kelime sayısı girin!');
-    return;
-  }
-  if (words.length === 0) {
-    showError('Önce kelime yükleyin!');
-    return;
-  }
+  if (notificationWordCountInput.value && (isNaN(newCount) || newCount < 1)) { showError('Lütfen geçerli bir bildirim kelime sayısı girin!'); return; }
+  if (words.length === 0) { showError('Önce kelime yükleyin!'); return; }
   notificationWordCount = newCount;
   localStorage.setItem('notificationWordCount', notificationWordCount);
   const selectedWords = getSelectedItems(words, notificationWordCount, 'random');
@@ -319,8 +252,28 @@ function updateNotifications() {
   hideError();
   showToast('Bildirimler başlatıldı!');
 }
+function getSelectedItems(array, count, method) {
+  if (!count || count >= array.length) return array;
+  if (method === 'first') return array.slice(0, count);
+  if (method === 'last') return array.slice(-count);
+  const shuffled = array.slice().sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
 
-// --- DIŞA AKTARIM ---
+// Progress Bar ve Günlük Hedef
+function updateProgressBar() {
+  learnedToday = Math.min(learnedToday, dailyGoal);
+  const percent = Math.min(100, Math.round(100 * learnedToday / dailyGoal));
+  document.getElementById('progressBar').style.width = percent + "%";
+  document.getElementById('progressText').textContent = `${learnedToday}/${dailyGoal}`;
+}
+function resetProgress() {
+  learnedToday = 0;
+  localStorage.setItem('learnedToday', learnedToday);
+  updateProgressBar();
+}
+
+// Dışa Aktarım
 function exportWordsAsJSON() {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(words, null, 2));
   const dlAnchorElem = document.createElement('a');
@@ -332,12 +285,9 @@ function exportWordsAsJSON() {
   showToast('JSON dışa aktarıldı!', "bg-blue-500");
 }
 
-// --- QUIZ / TEST MODU ---
+// Quiz / Test Modu
 function startQuiz() {
-  if (words.length === 0) {
-    showError('Önce kelime yükleyin!');
-    return;
-  }
+  if (words.length === 0) { showError('Önce kelime yükleyin!'); return; }
   quizData.arr = [...words].sort(() => Math.random() - 0.5).slice(0, 10);
   quizData.idx = 0;
   quizData.mode = true;
@@ -355,9 +305,9 @@ function showQuizStats() {
   `;
 }
 function showQuizQuestion() {
-  if(quizData.idx >= quizData.arr.length) {
+  if (quizData.idx >= quizData.arr.length) {
     closeQuizModal();
-    showToast(`Quiz tamamlandı! Skor: ${quizStats.correct}/${quizData.arr.length}`,"bg-purple-600");
+    showToast(`Quiz tamamlandı! Skor: ${quizStats.correct}/${quizData.arr.length}`, "bg-purple-600");
     showQuizStats();
     return;
   }
@@ -368,53 +318,63 @@ function submitQuizAnswer() {
   const w = quizData.arr[quizData.idx];
   const answer = document.getElementById('quizAnswer').value.trim().toLowerCase();
   closeQuizModal();
-  if(answer && w.meaning && answer === w.meaning.trim().toLowerCase()) {
+  if (answer && w.meaning && answer === w.meaning.trim().toLowerCase()) {
     quizStats.correct++;
-    showToast("Doğru!","bg-green-500");
+    showToast("Doğru!", "bg-green-500");
   } else {
-    showToast(`Yanlış! Doğru: ${w.meaning || "Tanımsız"}`,"bg-red-500");
+    showToast(`Yanlış! Doğru: ${w.meaning || "Tanımsız"}`, "bg-red-500");
   }
   localStorage.setItem('quizStats', JSON.stringify(quizStats));
   quizData.idx++;
   setTimeout(showQuizQuestion, 1000);
 }
+function openQuizModal(q) {
+  document.getElementById('quizQuestion').textContent = q;
+  document.getElementById('quizModal').classList.remove('hidden');
+}
+function closeQuizModal() {
+  document.getElementById('quizModal').classList.add('hidden');
+  document.getElementById('quizAnswer').value = '';
+}
 
-// --- AUDIO QUIZ MODU ---
-function showAudioQuizSection() { /* placeholder for any future render logic */ }
+// Audio Quiz Modu
+function showAudioQuizSection() { }
 function startAudioQuiz() {
-  if (words.length === 0) {
-    showError('Önce kelime yükleyin!');
-    return;
-  }
+  if (words.length === 0) { showError('Önce kelime yükleyin!'); return; }
   audioQuizData.arr = [...words].sort(() => Math.random() - 0.5).slice(0, 10);
   audioQuizData.idx = 0;
   showAudioQuizQuestion();
 }
 function showAudioQuizQuestion() {
-  if(audioQuizData.idx >= audioQuizData.arr.length) {
+  if (audioQuizData.idx >= audioQuizData.arr.length) {
     closeAudioQuizModal();
-    showToast(`Sesli quiz tamamlandı!`,"bg-purple-600");
+    showToast(`Sesli quiz tamamlandı!`, "bg-purple-600");
     return;
   }
   openAudioQuizModal();
-  setTimeout(()=>speakWord(audioQuizData.arr[audioQuizData.idx].word), 600);
+  setTimeout(() => speakWord(audioQuizData.arr[audioQuizData.idx].word), 600);
 }
 function submitQuizAudioAnswer() {
   const w = audioQuizData.arr[audioQuizData.idx];
   const answer = document.getElementById('audioQuizAnswer').value.trim().toLowerCase();
   closeAudioQuizModal();
-  if(answer && answer === w.word.trim().toLowerCase()) {
-    showToast("Doğru!","bg-green-500");
+  if (answer && answer === w.word.trim().toLowerCase()) {
+    showToast("Doğru!", "bg-green-500");
   } else {
-    showToast(`Yanlış! Doğru: ${w.word}`,"bg-red-500");
+    showToast(`Yanlış! Doğru: ${w.word}`, "bg-red-500");
   }
   audioQuizData.idx++;
   setTimeout(showAudioQuizQuestion, 1000);
 }
+function openAudioQuizModal() {
+  document.getElementById('audioQuizModal').classList.remove('hidden');
+}
+function closeAudioQuizModal() {
+  document.getElementById('audioQuizModal').classList.add('hidden');
+  document.getElementById('audioQuizAnswer').value = '';
+}
 
-// --- FLASHCARD MODU ---
-let flashcardIndex = 0;
-let flashcardShowMeaning = false;
+// Flashcard Modu
 function showFlashcardSection() {
   renderFlashcard();
   document.getElementById('flashcardBadge').textContent = words.length;
@@ -456,7 +416,7 @@ function markLearned() {
   words[flashcardIndex].learned = true;
   localStorage.setItem('words', JSON.stringify(words));
   renderFlashcard();
-  showToast('Kelimeni öğrendin!','bg-green-600');
+  updateProgressBar();
 }
 function addFlashcardNote() {
   if (!words.length) return;
@@ -465,7 +425,7 @@ function addFlashcardNote() {
     words[flashcardIndex].note = note;
     localStorage.setItem('words', JSON.stringify(words));
     renderFlashcard();
-    showToast('Not kaydedildi!','bg-blue-600');
+    showToast('Not kaydedildi!', 'bg-blue-600');
   }
 }
 function speakFlashcard() {
@@ -473,19 +433,48 @@ function speakFlashcard() {
   speakWord(words[flashcardIndex].word, flashcardShowMeaning ? words[flashcardIndex].meaning : "");
 }
 
-// --- SAYFA AÇILIŞI ---
+// Sesli Okuma
+function speakWord(word, meaning) {
+  if (!('speechSynthesis' in window)) {
+    showError("Tarayıcınız sesli okuma desteklemiyor!");
+    return;
+  }
+  const utter = new SpeechSynthesisUtterance(`${word} ${meaning ? ': ' + meaning : ''}`);
+  window.speechSynthesis.speak(utter);
+}
+
+// Toast ve Error
+function showToast(msg, extraClass = "") {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.className = `fixed right-4 bottom-4 px-4 py-3 rounded shadow-lg z-50 bg-green-500 text-white opacity-100 pointer-events-auto transition ${extraClass}`;
+  setTimeout(() => { toast.classList.add('opacity-0'); }, 2000);
+}
+function showError(msg) {
+  const err = document.getElementById('error');
+  err.textContent = msg;
+  err.classList.remove('hidden');
+}
+function hideError() {
+  document.getElementById('error').classList.add('hidden');
+}
+function badgeBounce() {
+  const badge = document.getElementById('listBadge');
+  if (badge) {
+    badge.classList.add('animate-bounce');
+    setTimeout(() => badge.classList.remove('animate-bounce'), 1000);
+  }
+}
+
+// Sayfa Açılışı
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('notificationWordCount').value = notificationWordCount || '';
   renderWords();
   showQuizStats();
   hideError();
   updateProgressBar();
-  if (localStorage.getItem('darkMode') === 'true') {
-    document.body.classList.add('dark-mode');
-  }
+  if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js').catch(err => {
-      showError('Uygulama çevrimdışı desteği yüklenemedi.');
-    });
+    navigator.serviceWorker.register('/service-worker.js').catch(err => { showError('Uygulama çevrimdışı desteği yüklenemedi.'); });
   }
 });
