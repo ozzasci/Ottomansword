@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kelimelerim Modern</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css?family=Inter:400,600&display=swap" rel="stylesheet">
+  <script>
+    if(localStorage.theme === 'dark') document.documentElement.classList.add('dark');
+  </script>
+</head>
+<body class="bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-gray-900 dark:text-gray-100 font-inter min-h-screen flex flex-col">
+  <!-- Hero Header -->
+  <div class="relative overflow-hidden">
+    <div class="w-full py-10 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 text-white rounded-b-3xl mb-4 shadow-xl flex flex-col items-center">
+      <div class="flex items-center gap-4 mb-2">
+        <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Profil" class="w-14 h-14 rounded-full border-4 border-white shadow">
+        <div>
+          <h1 class="text-3xl font-bold">Kelimelerim</h1>
+          <p class="text-lg opacity-90">Her gün yeni kelimeler öğren!</p>
+        </div>
+      </div>
+      <div class="w-full max-w-md mt-4">
+        <div class="flex justify-between text-sm mb-1">
+          <span class="font-semibold">Günlük Hedef</span>
+          <span id="progressText">0/10</span>
+        </div>
+        <div class="w-full bg-white/40 h-3 rounded-full">
+          <div id="progressBar" class="h-3 rounded-full bg-green-400 transition-all" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+    <svg class="absolute top-0 left-0 w-full h-24 opacity-30 pointer-events-none" viewBox="0 0 900 200"><path fill="#a78bfa" d="M0,64L60,80C120,96,240,128,360,133.3C480,139,600,117,720,112C840,107,960,117,1080,133.3C1200,149,1320,171,1380,181.3L1440,192L1440,320L1380,320C1320,320,1200,320,1080,320C960,320,840,320,720,320C600,320,480,320,360,320C240,320,120,320,60,320L0,320Z"></path></svg>
+  </div>
+  <nav class="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-gray-900/80 shadow-md relative z-10 rounded-b-xl">
+    <div class="flex items-center gap-2 text-2xl font-bold text-blue-700 dark:text-purple-300"><span>📚</span>Kelimelerim</div>
+    <div class="flex items-center gap-3">
+      <button onclick="toggleDarkMode()" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Tema">
+        <span id="themeIcon">🌙</span>
+      </button>
+      <button onclick="showSection('quiz')" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Quiz"><span>📝</span></button>
+      <button onclick="showSection('audioQuiz')" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Sesli Quiz"><span>🔉</span></button>
+      <button onclick="showSection('flashcard')" class="p-2 rounded-full hover:bg-green-100 dark:hover:bg-green-800 transition" title="Flashcard"><span>🃏</span></button>
+      <button onclick="showSection('kelimeListesi')" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Liste"><span>📖</span></button>
+      <button onclick="showSection('kelimeEkle')" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Ekle"><span>➕</span></button>
+      <button onclick="showSection('ayarlar')" class="p-2 rounded-full hover:bg-blue-300/30 dark:hover:bg-purple-300/20 transition" title="Ayarlar"><span>⚙️</span></button>
+    </div>
+  </nav>
+  <main class="flex-1 w-full max-w-2xl mx-auto px-2 py-6">
+    <div id="toast" class="fixed right-4 bottom-4 bg-green-500 text-white px-4 py-3 rounded shadow-lg opacity-0 pointer-events-none transition z-50"></div>
+    <div id="error" class="hidden mb-4 px-4 py-3 rounded bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200"></div>
+    <!-- Kelime Ekle -->
+    <section id="kelimeEkle" class="card mb-6 animate-in">
+      <h2 class="text-xl font-semibold mb-3">Kelime Ekle</h2>
+      <div class="flex flex-col sm:flex-row gap-3 mb-3">
+        <input id="wordInput" class="input" placeholder="Kelime">
+        <input id="intervalInput" class="input" type="number" placeholder="Süre (sn)">
+        <button class="btn btn-primary" onclick="addWord()">Ekle</button>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input type="file" id="fileInput" class="input-file">
+        <button class="btn" onclick="uploadFile()">Dosya Yükle</button>
+      </div>
+    </section>
+    <!-- Kelime Listesi -->
+    <section id="kelimeListesi" class="card mb-6 hidden animate-in">
+      <h2 class="text-xl font-semibold mb-3 flex items-center gap-2">
+        Kelime Listesi
+        <span class="inline-block bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-full font-semibold ml-2" id="listBadge">0</span>
+      </h2>
+      <input class="input mb-3" id="wordSearch" placeholder="Kelime veya anlam ara..." oninput="filterWords()">
+      <ul id="wordList" class="space-y-2"></ul>
+      <div class="flex flex-wrap gap-2 mt-4">
+        <button class="btn btn-danger" onclick="clearAllWords()">Tümünü Sil</button>
+        <button class="btn btn-outline" onclick="exportWordsAsJSON()">Dışa Aktar (JSON)</button>
+      </div>
+    </section>
+    <!-- Ayarlar -->
+    <section id="ayarlar" class="card mb-6 hidden animate-in">
+      <h2 class="text-xl font-semibold mb-3">Ayarlar</h2>
+      <label class="block mb-3">
+        <span>Bildirilecek kelime sayısı:</span>
+        <input id="notificationWordCount" type="number" min="1" class="input mt-1 w-32">
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn btn-primary" onclick="updateNotifications()">Bildirimleri Başlat</button>
+        <button class="btn btn-outline" onclick="stopAllNotifications()">Bildirimleri Durdur</button>
+      </div>
+    </section>
+    <!-- Quiz -->
+    <section id="quiz" class="card hidden animate-in">
+      <h2 class="text-xl font-semibold mb-3">Quiz / Test Modu</h2>
+      <button class="btn btn-success" onclick="startQuiz()">Quiz Başlat</button>
+      <div id="quizStats" class="mt-4"></div>
+    </section>
+    <!-- Audio Quiz -->
+    <section id="audioQuiz" class="card hidden animate-in">
+      <h2 class="text-xl font-semibold mb-3">Sesli Quiz (Dinle ve Yaz)</h2>
+      <button class="btn btn-accent" onclick="startAudioQuiz()">Sesli Quiz Başlat</button>
+    </section>
+    <!-- Flashcard Modu -->
+    <section id="flashcard" class="card mb-6 hidden">
+      <h2 class="text-xl font-semibold mb-3 flex items-center gap-2">
+        Flashcard Modu <span class="inline-block bg-green-200 text-green-800 text-xs px-2 py-1 rounded-full font-semibold ml-2" id="flashcardBadge">0</span>
+      </h2>
+      <div id="flashcardBox" class="flex flex-col items-center justify-center min-h-[220px]"></div>
+      <div class="flex gap-2 mt-4 justify-center">
+        <button class="btn btn-outline" onclick="prevFlashcard()">Önceki</button>
+        <button class="btn btn-outline" onclick="nextFlashcard()">Sonraki</button>
+        <button class="btn btn-accent" onclick="toggleFlashcard()">Çevir</button>
+        <button class="btn btn-primary" onclick="markLearned()">Öğrenildi</button>
+        <button class="btn btn-outline" onclick="addFlashcardNote()">Not Ekle</button>
+        <button class="btn btn-outline" onclick="speakFlashcard()">🔊</button>
+      </div>
+    </section>
+    <!-- Quiz Modal -->
+    <div id="quizModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+      <div class="bg-white dark:bg-gray-900 p-8 rounded-xl shadow-xl w-full max-w-md animate-in">
+        <h3 class="text-xl font-bold mb-4" id="quizQuestion"></h3>
+        <input id="quizAnswer" class="input w-full mb-3" placeholder="Cevabınızı yazın..." autocomplete="off">
+        <div class="flex gap-2">
+          <button class="btn btn-primary flex-1" onclick="submitQuizAnswer()">Cevapla</button>
+          <button class="btn btn-outline flex-1" onclick="closeQuizModal()">Vazgeç</button>
+        </div>
+      </div>
+    </div>
+    <!-- Audio Quiz Modal -->
+    <div id="audioQuizModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+      <div class="bg-white dark:bg-gray-900 p-8 rounded-xl shadow-xl w-full max-w-md animate-in">
+        <h3 class="text-xl font-bold mb-4">Dinlediğiniz kelimeyi yazın!</h3>
+        <input id="audioQuizAnswer" class="input w-full mb-3" placeholder="Cevabınızı yazın..." autocomplete="off">
+        <div class="flex gap-2">
+          <button class="btn btn-primary flex-1" onclick="submitQuizAudioAnswer()">Cevapla</button>
+          <button class="btn btn-outline flex-1" onclick="closeAudioQuizModal()">Vazgeç</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <!-- Bottom navigation for mobile -->
+  <nav class="fixed left-0 right-0 bottom-0 z-40 bg-white/90 dark:bg-gray-800/90 shadow-xl flex justify-around py-2 rounded-t-xl sm:hidden">
+    <button onclick="showSection('kelimeEkle')" class="flex flex-col items-center text-blue-500"><span>➕</span><span class="text-xs">Ekle</span></button>
+    <button onclick="showSection('kelimeListesi')" class="flex flex-col items-center text-purple-500"><span>📖</span><span class="text-xs">Liste</span></button>
+    <button onclick="showSection('quiz')" class="flex flex-col items-center text-green-500"><span>📝</span><span class="text-xs">Quiz</span></button>
+    <button onclick="showSection('audioQuiz')" class="flex flex-col items-center text-blue-600"><span>🔉</span><span class="text-xs">Sesli</span></button>
+    <button onclick="showSection('flashcard')" class="flex flex-col items-center text-yellow-500"><span>🃏</span><span class="text-xs">Kart</span></button>
+    <button onclick="showSection('ayarlar')" class="flex flex-col items-center text-gray-500"><span>⚙️</span><span class="text-xs">Ayar</span></button>
+  </nav>
+  <footer class="py-3 text-center text-gray-400 text-sm dark:text-gray-500 mt-10">© 2025 Kelimelerim</footer>
+  <script src="script.js"></script>
+  <script>
+    function toggleDarkMode() {
+      const html = document.documentElement;
+      if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        localStorage.theme = 'light';
+        document.getElementById('themeIcon').textContent = '🌙';
+      } else {
+        html.classList.add('dark');
+        localStorage.theme = 'dark';
+        document.getElementById('themeIcon').textContent = '☀️';
+      }
+    }
+    function showSection(id) {
+      for(const sec of ['kelimeEkle','kelimeListesi','ayarlar','quiz','audioQuiz','flashcard']) {
+        const el = document.getElementById(sec);
+        if(el) {
+          if(sec===id) {
+            el.classList.remove('hidden');
+            setTimeout(()=>el.classList.add('fade-in'),10);
+          } else {
+            el.classList.add('hidden');
+            el.classList.remove('fade-in');
+          }
+        }
+      }
+      // Özel: Flashcard veya AudioQuiz ise ilgili render fonksiyonunu çağır
+      if(id==="flashcard" && typeof showFlashcardSection==="function") showFlashcardSection();
+      if(id==="audioQuiz" && typeof showAudioQuizSection==="function") showAudioQuizSection();
+    }
+    function openQuizModal(q) {
+      document.getElementById('quizQuestion').textContent = q;
+      document.getElementById('quizModal').classList.remove('hidden');
+      document.getElementById('quizAnswer').value = '';
+      setTimeout(() => document.getElementById('quizAnswer').focus(), 150);
+    }
+    function closeQuizModal() {
+      document.getElementById('quizModal').classList.add('hidden');
+    }
+    function openAudioQuizModal() {
+      document.getElementById('audioQuizModal').classList.remove('hidden');
+      document.getElementById('audioQuizAnswer').value = '';
+      setTimeout(() => document.getElementById('audioQuizAnswer').focus(), 150);
+    }
+    function closeAudioQuizModal() {
+      document.getElementById('audioQuizModal').classList.add('hidden');
+    }
+  </script>
+  <style>
+    .card { transition: background 0.2s, box-shadow 0.2s;}
+    .fade-in, .animate-in { animation: fadein 0.5s;}
+    @keyframes fadein { from{opacity:0;transform:scale(0.98);} to{opacity:1;transform:scale(1);} }
+    #toast { transition: opacity 0.4s;}
+    #listBadge { transition: transform 0.2s;}
+    #listBadge.bounce { transform: scale(1.2);}
+  </style>
+</body>
+</html>
